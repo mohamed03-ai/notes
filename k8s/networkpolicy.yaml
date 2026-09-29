@@ -1,0 +1,14 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: notes-api
+  namespace: notes
+spec:
+  podSelector:
+    matchLabels:
+      app: notes-api
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - ports:
+        - port: 3000
+  egress: []
