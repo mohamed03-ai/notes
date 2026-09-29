@@ -31,6 +31,24 @@ pipeline {
         sh 'npm test'
       }
     }
+        stage('SonarQube Scan') {
+      steps {
+        script {
+          def scannerHome = tool 'sonar-scanner'
+          withSonarQubeEnv('sonarqube') {
+            sh "${scannerHome}/bin/sonar-scanner"
+          }
+        }
+      }
+    }
+
+    stage('Quality Gate') {
+      steps {
+        timeout(time: 5, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
   }
 
   post {
