@@ -12,6 +12,9 @@ pipeline {
     APP_NAME   = 'notes-api'
     AWS_REGION = 'us-east-1'
     ECR_REPO   = 'notes/depos'
+    TRIVY_DISABLE_VEX_NOTICE = 'true'
+    TRIVY_SKIP_VERSION_CHECK = 'true'
+
   }
 
   stages {
