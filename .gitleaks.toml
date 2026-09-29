@@ -1,0 +1,11 @@
+title = "notes-api gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ignore generated and dependency folders"
+paths = [
+  '''node_modules/''',
+  '''coverage/''',
+]

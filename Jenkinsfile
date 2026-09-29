@@ -12,6 +12,7 @@ pipeline {
     APP_NAME   = 'notes-api'
     AWS_REGION = 'us-east-1'
     ECR_REPO   = 'notes/depos'
+    CLUSTER = 'notes-eks'
     TRIVY_DISABLE_VEX_NOTICE = 'true'
     TRIVY_SKIP_VERSION_CHECK = 'true'
 
@@ -120,6 +121,45 @@ pipeline {
         '''
       }
     }
+        stage('Deploy to EKS') {
+      steps {
+        sh '''
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER"
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/serviceaccount.yaml
+          kubectl apply -f k8s/networkpolicy.yaml
+          kubectl apply -f k8s/service.yaml
+          sed "s|ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/notes/depos:IMAGE_TAG|$IMAGE|" k8s/deployment.yaml | kubectl apply -f -
+        '''
+      }
+    }
+
+    stage('Verify Rollout') {
+      steps {
+        sh 'kubectl -n notes rollout status deployment/notes-api --timeout=180s'
+      }
+      post {
+        failure {
+          sh '''
+            echo "Rollout failed, rolling back"
+            kubectl -n notes rollout undo deployment/notes-api
+            kubectl -n notes rollout status deployment/notes-api --timeout=120s
+          '''
+        }
+      }
+    }
+        stage('OWASP ZAP Baseline') {
+      steps {
+        script {
+          env.APP_URL = sh(script: "kubectl -n notes get svc notes-api -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'", returnStdout: true).trim()
+        }
+        sh '''
+          mkdir -p reports && chmod 777 reports
+          docker run --rm -v "$PWD/reports:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t "http://$APP_URL" -r zap-report.html -I
+        '''
+      }
+    }
   }
 
   post {
@@ -128,6 +168,9 @@ pipeline {
       sh 'docker rmi "$IMAGE" || true'
       sh 'docker logout "$REGISTRY" || true'
       sh 'docker image prune -f || true'
+      
     }
+    success { echo "Deployed ${env.IMAGE} to EKS" }
+    failure { echo "Pipeline failed at ${env.STAGE_NAME}" }
   }
 }
