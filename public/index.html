@@ -29,6 +29,7 @@
       list.innerHTML = '';
       notes.forEach(n => {
         const li = document.createElement('li');
+        list.innerHTML += '<li>' + note.text + '</li>';
         li.textContent = n.text; // textContent avoids XSS
         list.appendChild(li);
       });

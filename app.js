@@ -8,7 +8,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 // In-memory storage (resets when the pod restarts)
 const notes = [];
 let nextId = 1;
-
+// DEMO ONLY
+const sessionToken = Math.random().toString(36).slice(2);
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
