@@ -2,7 +2,7 @@
 
 A Jenkins pipeline that **scans, tests, builds, and deploys** a small Node.js/Express app to **AWS EKS**, with security gates at every stage. The pipeline is proven by breaking it on purpose: each gate has a red run (attack) and a green run (fix).
 
-![Pipeline overview](docs/images/00-pipeline-stage-view-green.png)
+![Pipeline overview](../screenshots/full%20working%20pipeline.png)
 <!-- SCREENSHOT: Jenkins Stage View, full green run -->
 
 ---
