@@ -25,30 +25,8 @@ A Jenkins pipeline that **scans, tests, builds, and deploys** a small Node.js/Ex
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    Dev[Developer] -->|git push| GH[GitHub]
-    GH -->|Poll SCM| J[Jenkins on EC2]
 
-    subgraph CI [CI on Jenkins EC2]
-        J --> GL[Gitleaks]
-        GL --> UT[Unit tests + coverage]
-        UT --> DS[npm audit + Trivy fs]
-        DS --> SQ[SonarQube + Quality Gate]
-        SQ --> HL[Hadolint]
-        HL --> DB[Docker build]
-        DB --> TI[Trivy image scan]
-    end
-
-    TI -->|push| ECR[(Amazon ECR)]
-    ECR -->|pull| EKS[EKS cluster: namespace notes]
-    J -->|kubectl apply + rollout check| EKS
-    J -->|DAST| ZAP[OWASP ZAP baseline]
-    ZAP -.->|scans| LB[Load Balancer]
-    LB --> EKS
-```
-
-![Architecture diagram](docs/images/01-architecture.png)
+![Architecture diagram](../screenshots/architecture.drawio.png)
 <!-- SCREENSHOT (optional): a polished diagram exported from draw.io, if you prefer it over the Mermaid above -->
 
 **Flow in one sentence:** a push to GitHub triggers Jenkins, which runs security and quality gates, builds and scans a container image, pushes it to ECR, deploys it to EKS with automatic rollback, and finally runs a dynamic scan against the live app.
@@ -92,10 +70,10 @@ flowchart LR
 | 13 | DAST | OWASP ZAP | Missing headers, runtime web issues | No (report only) |
 | 14 | Post actions | Jenkins | Archives reports, cleans up images, reports status | n/a |
 
-![Stage view with timings](docs/images/02-stage-view.png)
+![Stage view with timings](../screenshots/full%20working%20pipeline.png)
 <!-- SCREENSHOT: Stage View showing all stages with timings -->
 
-![Archived reports](docs/images/03-archived-reports.png)
+![Archived reports](../screenshots/artifact.png)
 <!-- SCREENSHOT: Build page listing archived artifacts (coverage, gitleaks.json, trivy reports, ZAP report) -->
 
 ---
@@ -125,13 +103,11 @@ flowchart LR
 - 2 replicas with a zero-downtime rolling update
 - NetworkPolicy restricting ingress and blocking egress (**enforcement status: see [Known limitations](#known-limitations)**)
 
-![Pod security context](docs/images/04-pod-security-context.png)
-<!-- SCREENSHOT: output of `kubectl -n notes get pod -o jsonpath='{.items[0].spec.containers[0].securityContext}'` and `kubectl exec ... -- id` -->
 
-![Pods running](docs/images/05-pods-running.png)
+![Pods running](../screenshots/podsa.png)
 <!-- SCREENSHOT: `kubectl -n notes get pods,svc` -->
 
-![App running](docs/images/06-app-live.png)
+![App running](../screenshots/Runningapp.png)
 <!-- SCREENSHOT: browser showing the app (crop out the load balancer hostname if you prefer) -->
 
 ---
@@ -146,9 +122,8 @@ A fake AWS-style key was committed to `config.js`. Gitleaks failed the build and
 
 **Key lesson:** deleting the file in a later commit did **not** turn the build green, because the secret remains in git history. In a real incident the order is: revoke the credential, then clean up code and history.
 
-| Red run | After deleting the file (still red) | Green run |
-|---|---|---|
-| ![](docs/images/10-secret-red.png) | ![](docs/images/11-secret-still-red.png) | ![](docs/images/12-secret-green.png) |
+![RED RUN](../screenshots/demo-secret.png)
+![GITLEAKS](../screenshots/demo-secret-gitleaks.png)
 
 <!-- SCREENSHOTS: red stage view, Gitleaks JSON report, still red after deletion, green run on clean history -->
 
@@ -156,9 +131,7 @@ A fake AWS-style key was committed to `config.js`. Gitleaks failed the build and
 
 `lodash@4.17.15` was added. The Dependency Scan stage failed with high-severity advisories. Upgrading the package fixed it.
 
-| Red run | Audit output | Green run |
-|---|---|---|
-| ![](docs/images/20-dep-red.png) | ![](docs/images/21-dep-audit.png) | ![](docs/images/22-dep-green.png) |
+![RED RUN](../screenshots/trivyfailling.png)
 
 ### 3. Insecure code (SonarQube)
 
