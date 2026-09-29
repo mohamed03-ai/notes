@@ -23,6 +23,16 @@ pipeline {
         }
       }
     }
+    stage('Gitleaks Secret Scan') {
+      steps {
+        sh '''
+          mkdir -p reports
+          gitleaks detect --source . --config .gitleaks.toml \
+            --report-format json --report-path reports/gitleaks.json \
+            --redact --exit-code 1
+        '''
+      }
+    }
 
     stage('Install & Unit Test') {
       steps {
@@ -41,6 +51,20 @@ pipeline {
         }
       }
     }
+    stage('Dependency Scan') {
+      steps {
+        sh '''
+          mkdir -p reports
+          npm audit --omit=dev --audit-level=high
+        '''
+        sh '''
+          trivy fs --scanners vuln,secret,misconfig \
+            --severity HIGH,CRITICAL --exit-code 1 \
+            --format table --output reports/trivy-fs.txt .
+          cat reports/trivy-fs.txt
+        '''
+      }
+    }
 
     stage('Quality Gate') {
       steps {
@@ -53,7 +77,7 @@ pipeline {
 
   post {
     always {
-      archiveArtifacts artifacts: 'coverage/**', allowEmptyArchive: true
+      archiveArtifacts artifacts: 'coverage/** , reports/**', allowEmptyArchive: true
     }
   }
 }

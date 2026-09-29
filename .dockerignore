@@ -1,0 +1,10 @@
+node_modules
+coverage
+tests
+.git
+.gitignore
+.env
+.dockerignore
+*.md
+Jenkinsfile
+k8s
