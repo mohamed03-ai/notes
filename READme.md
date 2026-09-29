@@ -151,84 +151,8 @@ A fake AWS-style key was committed to `config.js`. Gitleaks failed the build and
  
 **The fix:** the unsafe rendering was replaced with `textContent`, and `Math.random()` was removed. The gate passed on the next run.
  
- [RED RUN](screenshots/demo-xss.png)
+![RED RUN](screenshots/demo-xss.png)
 ![GITLEAKS](screenshots/sonarfailling.png)
- 
-
- 
-### 4. Vulnerable base image (Trivy image scan): a real finding
- 
-This one was not staged. On the very first image build, the Trivy gate failed with a **CRITICAL** finding: `tar` 6.2.1 (denial of service via a crafted gzip archive, fixed in 7.5.19). It was not an application dependency, since `npm audit` and `trivy fs` had passed. It was the copy of `tar` **bundled inside npm in the Node base image**.
- 
-**The fix:** the app only needs `node` at runtime, so npm was removed from the final image stage. This also shrinks the image and removes a whole class of future findings. The container starts with `node server.js` directly, and the health check does not depend on npm.
- 
-**The result:** the gate passed on the next build, and the image was pushed to ECR.
- 
-| Red run | Trivy table | Green run |
-|---|---|---|
-| ![](docs/images/40-image-red.png) | ![](docs/images/41-image-trivy.png) | ![](docs/images/42-image-green.png) |
- 
-<!-- SCREENSHOTS: the original failed build's console with the tar CVE table (if the build is still in Jenkins history), and the green build after the fix. If the failed build was already discarded, keep the text above and delete the image rows. -->
- 
-### 5. Bad Dockerfile practice (Hadolint)
- 
-**The change:** on a throwaway branch, the Dockerfile was degraded with three common mistakes:
- 
-| Mistake | Hadolint rule |
-|---|---|
-| Base image tagged `latest` (unpinned, not reproducible) | DL3007 |
-| `apk add curl` without a pinned version | DL3018 |
-| `USER root` as the final instruction | DL3002 |
- 
-**What happened:** the **Hadolint** stage failed (threshold: warning), and every later stage was skipped, so no image was built, scanned or pushed.
- 
-**The fix:** the hardened Dockerfile was restored, and the next build passed.
- 
-**What Hadolint reported:** <!-- FILL IN: paste the rule IDs actually shown in the console/report -->
- 
-| Red run | Hadolint output | Green run |
-|---|---|---|
-| ![](docs/images/50-hadolint-red.png) | ![](docs/images/51-hadolint-output.png) | ![](docs/images/52-hadolint-green.png) |
- 
-### 6. Broken release (automatic rollback)
- 
-**The change:** the readiness probe path in `k8s/deployment.yaml` was pointed at a route that does not exist (`/does-not-exist`). This is a realistic configuration mistake: every scan passes, the image is fine, and the failure only appears when the pods run. Breaking `/health` in the app code was deliberately avoided, because the unit tests would catch it before deployment and never reach the cluster.
- 
-**What happened:**
- 
-1. The pipeline deployed the new revision. The new pod started but never became ready.
-2. Because the rolling update uses `maxUnavailable: 0`, the two healthy pods from the previous revision **kept serving traffic** the whole time.
-3. The **Verify Rollout** stage timed out and failed.
-4. The failure handler ran `kubectl rollout undo` and waited for the previous revision to be healthy again.
-5. The app stayed reachable throughout, with no downtime.
-**Evidence of the revision trail:** `kubectl -n notes rollout history deployment/notes-api`
- 
-| Failed rollout | Rollback in console | App still healthy |
-|---|---|---|
-| ![](docs/images/60-rollout-red.png) | ![](docs/images/61-rollback-log.png) | ![](docs/images/62-app-still-up.png) |
- 
-### 7. Dynamic scan (OWASP ZAP): before and after
- 
-The ZAP baseline scan runs against the live load balancer after each deployment. It is a passive scan that spiders the app and inspects responses.
- 
-**Before:** the report warned about missing security headers on the Express app (for example Content-Security-Policy, anti-clickjacking, `X-Content-Type-Options`, and the `X-Powered-By` header revealing the framework).
- 
-**The fix:** `helmet` was added to Express (`app.use(helmet())`), which sets a secure default set of response headers. It was tested locally first, because helmet's default Content-Security-Policy blocks inline scripts and can break the front end.
- 
-**After:** the number of warnings dropped.
- 
-| | Warnings (`WARN-NEW`) | Passes (`PASS`) |
-|---|---|---|
-| Before helmet | <!-- FILL IN --> | <!-- FILL IN --> |
-| After helmet | <!-- FILL IN --> | <!-- FILL IN --> |
- 
-Some warnings may remain after the fix (for example Permissions Policy), and they are documented as accepted or future work rather than hidden. The scan runs with `-I`, so it reports but does not fail the build.
- 
-| Before | After |
-|---|---|
-| ![](docs/images/70-zap-before.png) | ![](docs/images/71-zap-after.png) |
- 
----
  
 
 ## Repository structure
@@ -252,8 +176,8 @@ Some warnings may remain after the fix (for example Permissions Policy), and the
 │   ├── deployment.yaml
 │   ├── service.yaml
 │   └── networkpolicy.yaml
-├── infra/                      # Terraform (EKS, Jenkins EC2)
-└── docs/images/                # Screenshots used in this README
+├── terraform/                      # Terraform (EKS, Jenkins EC2)
+└── screenshots/                # Screenshots used in this READMEs
 ```
 
 ---
@@ -296,13 +220,13 @@ kubectl get nodes
 ### 4. Create the job
 Pipeline from SCM, pointing at this repo and `Jenkinsfile`, with Poll SCM (`H/5 * * * *`).
 
-![Jenkins job configuration](docs/images/80-jenkins-job-config.png)
+![Jenkins job configuration](screenshots/SCM.png)
 <!-- SCREENSHOT: job configuration (blur any credentials or IPs) -->
 
-![SonarQube dashboard](docs/images/81-sonarqube-dashboard.png)
+![SonarQube dashboard](screenshots/sonarQUBE.png)
 <!-- SCREENSHOT: SonarQube project dashboard with passing Quality Gate -->
 
-![ECR image](docs/images/82-ecr-images.png)
+![ECR image](screenshots/ECR.png)
 <!-- SCREENSHOT: ECR repository showing tagged images and scan results (crop the account ID) -->
 
 ---
