@@ -11,6 +11,7 @@ pipeline {
   environment {
     APP_NAME   = 'notes-api'
     AWS_REGION = 'us-east-1'
+    ECR_REPO   = 'notes/depos'
   }
 
   stages {
@@ -73,11 +74,57 @@ pipeline {
         }
       }
     }
+        stage('Hadolint') {
+      steps {
+        sh '''
+          mkdir -p reports
+          hadolint --failure-threshold warning Dockerfile | tee reports/hadolint.txt
+        '''
+      }
+    }
+
+    stage('Docker Build') {
+      steps {
+        script {
+          env.ACCOUNT_ID = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
+          env.REGISTRY   = "${env.ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          env.IMAGE_TAG  = "${BUILD_NUMBER}-${env.GIT_SHORT}"
+          env.IMAGE      = "${env.REGISTRY}/${ECR_REPO}:${env.IMAGE_TAG}"
+        }
+        sh 'docker build -t "$IMAGE" .'
+      }
+    }
+
+    stage('Trivy Image Scan') {
+      steps {
+        sh '''
+          mkdir -p reports
+          trivy image --scanners vuln,secret --severity HIGH,CRITICAL \
+            --format table --output reports/trivy-image.txt "$IMAGE"
+          cat reports/trivy-image.txt
+          trivy image --scanners vuln,secret --severity CRITICAL \
+            --ignore-unfixed --exit-code 1 "$IMAGE"
+        '''
+      }
+    }
+
+    stage('Push to ECR') {
+      steps {
+        sh '''
+          aws ecr get-login-password --region "$AWS_REGION" | \
+            docker login --username AWS --password-stdin "$REGISTRY"
+          docker push "$IMAGE"
+        '''
+      }
+    }
   }
 
   post {
     always {
       archiveArtifacts artifacts: 'coverage/** , reports/**', allowEmptyArchive: true
+      sh 'docker rmi "$IMAGE" || true'
+      sh 'docker logout "$REGISTRY" || true'
+      sh 'docker image prune -f || true'
     }
   }
 }
