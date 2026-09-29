@@ -2,7 +2,7 @@
 
 A Jenkins pipeline that **scans, tests, builds, and deploys** a small Node.js/Express app to **AWS EKS**, with security gates at every stage. The pipeline is proven by breaking it on purpose: each gate has a red run (attack) and a green run (fix).
 
-![Pipeline overview](../screenshots/full%20working%20pipeline.png)
+![Pipeline overview](screenshots/full%20working%20pipeline.png)
 <!-- SCREENSHOT: Jenkins Stage View, full green run -->
 
 ---
@@ -26,7 +26,7 @@ A Jenkins pipeline that **scans, tests, builds, and deploys** a small Node.js/Ex
 ## Architecture
 
 
-![Architecture diagram](../screenshots/architecture.drawio.png)
+![Architecture diagram](screenshots/architecture.drawio.png)
 <!-- SCREENSHOT (optional): a polished diagram exported from draw.io, if you prefer it over the Mermaid above -->
 
 **Flow in one sentence:** a push to GitHub triggers Jenkins, which runs security and quality gates, builds and scans a container image, pushes it to ECR, deploys it to EKS with automatic rollback, and finally runs a dynamic scan against the live app.
@@ -70,10 +70,10 @@ A Jenkins pipeline that **scans, tests, builds, and deploys** a small Node.js/Ex
 | 13 | DAST | OWASP ZAP | Missing headers, runtime web issues | No (report only) |
 | 14 | Post actions | Jenkins | Archives reports, cleans up images, reports status | n/a |
 
-![Stage view with timings](../screenshots/full%20working%20pipeline.png)
+![Stage view with timings](screenshots/full%20working%20pipeline.png)
 <!-- SCREENSHOT: Stage View showing all stages with timings -->
 
-![Archived reports](../screenshots/artifact.png)
+![Archived reports](screenshots/artifact.png)
 <!-- SCREENSHOT: Build page listing archived artifacts (coverage, gitleaks.json, trivy reports, ZAP report) -->
 
 ---
@@ -104,10 +104,10 @@ A Jenkins pipeline that **scans, tests, builds, and deploys** a small Node.js/Ex
 - NetworkPolicy restricting ingress and blocking egress (**enforcement status: see [Known limitations](#known-limitations)**)
 
 
-![Pods running](../screenshots/podsa.png)
+![Pods running](screenshots/podsa.png)
 <!-- SCREENSHOT: `kubectl -n notes get pods,svc` -->
 
-![App running](../screenshots/Runningapp.png)
+![App running](screenshots/Runningapp.png)
 <!-- SCREENSHOT: browser showing the app (crop out the load balancer hostname if you prefer) -->
 
 ---
