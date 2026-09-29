@@ -122,8 +122,8 @@ A fake AWS-style key was committed to `config.js`. Gitleaks failed the build and
 
 **Key lesson:** deleting the file in a later commit did **not** turn the build green, because the secret remains in git history. In a real incident the order is: revoke the credential, then clean up code and history.
 
-![RED RUN](../screenshots/demo-secret.png)
-![GITLEAKS](../screenshots/demo-secret-gitleaks.png)
+![RED RUN](screenshots/demo-secret.png)
+![GITLEAKS](screenshots/demo-secret-gitleaks.png)
 
 <!-- SCREENSHOTS: red stage view, Gitleaks JSON report, still red after deletion, green run on clean history -->
 
@@ -131,56 +131,105 @@ A fake AWS-style key was committed to `config.js`. Gitleaks failed the build and
 
 `lodash@4.17.15` was added. The Dependency Scan stage failed with high-severity advisories. Upgrading the package fixed it.
 
-![RED RUN](../screenshots/trivyfailling.png)
+![RED RUN](screenshots/trivyfailling.png)
 
 ### 3. Insecure code (SonarQube)
+ 
+**Quality Gate configuration.** A custom gate named `notes-gate` is assigned to the project and evaluates **Overall Code**, since SonarQube Community Build has no branch analysis and the default gate only judges "new code". Conditions:
+ 
+| Metric (Overall Code) | Operator | Threshold | Purpose |
+|---|---|---|---|
+| Security Hotspots Reviewed | is less than | 100% | Fails while any security hotspot is unreviewed |
+| Security Rating / Vulnerabilities | is worse than / greater than | A / 0 | Fails when a real vulnerability is detected |
+| Coverage *(fallback)* | is less than | slightly below current coverage | Fails when untested code is added |
+ 
+> Metric names vary slightly between SonarQube versions, so the exact conditions used are the ones available in the version running here (26.x). The gate was first verified to **pass on clean `main`**, so that a red result means a real regression and not a gate that fails on everything.
+ 
+**The change:** on a throwaway branch, a note was rendered with `innerHTML` and unsanitized user text (an XSS pattern), and `Math.random()` was used to generate a token (weak randomness, reported as a security hotspot). The scan completed, but the **Quality Gate** stage failed, and the pipeline stopped before building or deploying anything.
+ 
+**What SonarQube reported:** <!-- FILL IN: the failed condition(s) and the hotspot/issue titles shown in SonarQube -->
+ 
+**The fix:** the unsafe rendering was replaced with `textContent`, and `Math.random()` was removed. The gate passed on the next run.
+ 
+ [RED RUN](screenshots/demo-xss.png)
+![GITLEAKS](screenshots/sonarfailling.png)
+ 
 
-<!-- Fill in after running: describe the innerHTML/XSS change and what SonarQube reported -->
-
-| Red run | SonarQube findings | Green run |
-|---|---|---|
-| ![](docs/images/30-sonar-red.png) | ![](docs/images/31-sonar-findings.png) | ![](docs/images/32-sonar-green.png) |
-
-### 4. Vulnerable base image (Trivy image scan)
-
-<!-- Fill in after running: describe the old base image used and the CVE table -->
-
+ 
+### 4. Vulnerable base image (Trivy image scan): a real finding
+ 
+This one was not staged. On the very first image build, the Trivy gate failed with a **CRITICAL** finding: `tar` 6.2.1 (denial of service via a crafted gzip archive, fixed in 7.5.19). It was not an application dependency, since `npm audit` and `trivy fs` had passed. It was the copy of `tar` **bundled inside npm in the Node base image**.
+ 
+**The fix:** the app only needs `node` at runtime, so npm was removed from the final image stage. This also shrinks the image and removes a whole class of future findings. The container starts with `node server.js` directly, and the health check does not depend on npm.
+ 
+**The result:** the gate passed on the next build, and the image was pushed to ECR.
+ 
 | Red run | Trivy table | Green run |
 |---|---|---|
 | ![](docs/images/40-image-red.png) | ![](docs/images/41-image-trivy.png) | ![](docs/images/42-image-green.png) |
-
-**Real finding (not staged):** Trivy blocked the very first build because the base image bundled a vulnerable `tar` inside npm (CRITICAL). The fix was removing npm from the runtime image.
-
-![Real Trivy finding](docs/images/43-real-trivy-finding.png)
-<!-- SCREENSHOT: the original red Trivy run with the tar CVE table -->
-
+ 
+<!-- SCREENSHOTS: the original failed build's console with the tar CVE table (if the build is still in Jenkins history), and the green build after the fix. If the failed build was already discarded, keep the text above and delete the image rows. -->
+ 
 ### 5. Bad Dockerfile practice (Hadolint)
-
-<!-- Fill in after running: describe the change (e.g. :latest tag, missing USER) and the Hadolint rule IDs -->
-
+ 
+**The change:** on a throwaway branch, the Dockerfile was degraded with three common mistakes:
+ 
+| Mistake | Hadolint rule |
+|---|---|
+| Base image tagged `latest` (unpinned, not reproducible) | DL3007 |
+| `apk add curl` without a pinned version | DL3018 |
+| `USER root` as the final instruction | DL3002 |
+ 
+**What happened:** the **Hadolint** stage failed (threshold: warning), and every later stage was skipped, so no image was built, scanned or pushed.
+ 
+**The fix:** the hardened Dockerfile was restored, and the next build passed.
+ 
+**What Hadolint reported:** <!-- FILL IN: paste the rule IDs actually shown in the console/report -->
+ 
 | Red run | Hadolint output | Green run |
 |---|---|---|
 | ![](docs/images/50-hadolint-red.png) | ![](docs/images/51-hadolint-output.png) | ![](docs/images/52-hadolint-green.png) |
-
+ 
 ### 6. Broken release (automatic rollback)
-
-`/health` was made to fail. The rollout did not become healthy, the pipeline ran `kubectl rollout undo`, and the previous version kept serving traffic.
-
+ 
+**The change:** the readiness probe path in `k8s/deployment.yaml` was pointed at a route that does not exist (`/does-not-exist`). This is a realistic configuration mistake: every scan passes, the image is fine, and the failure only appears when the pods run. Breaking `/health` in the app code was deliberately avoided, because the unit tests would catch it before deployment and never reach the cluster.
+ 
+**What happened:**
+ 
+1. The pipeline deployed the new revision. The new pod started but never became ready.
+2. Because the rolling update uses `maxUnavailable: 0`, the two healthy pods from the previous revision **kept serving traffic** the whole time.
+3. The **Verify Rollout** stage timed out and failed.
+4. The failure handler ran `kubectl rollout undo` and waited for the previous revision to be healthy again.
+5. The app stayed reachable throughout, with no downtime.
+**Evidence of the revision trail:** `kubectl -n notes rollout history deployment/notes-api`
+ 
 | Failed rollout | Rollback in console | App still healthy |
 |---|---|---|
 | ![](docs/images/60-rollout-red.png) | ![](docs/images/61-rollback-log.png) | ![](docs/images/62-app-still-up.png) |
-
+ 
 ### 7. Dynamic scan (OWASP ZAP): before and after
-
-ZAP baseline reported missing security headers. Adding `helmet` to Express reduced the warnings.
-
+ 
+The ZAP baseline scan runs against the live load balancer after each deployment. It is a passive scan that spiders the app and inspects responses.
+ 
+**Before:** the report warned about missing security headers on the Express app (for example Content-Security-Policy, anti-clickjacking, `X-Content-Type-Options`, and the `X-Powered-By` header revealing the framework).
+ 
+**The fix:** `helmet` was added to Express (`app.use(helmet())`), which sets a secure default set of response headers. It was tested locally first, because helmet's default Content-Security-Policy blocks inline scripts and can break the front end.
+ 
+**After:** the number of warnings dropped.
+ 
+| | Warnings (`WARN-NEW`) | Passes (`PASS`) |
+|---|---|---|
+| Before helmet | <!-- FILL IN --> | <!-- FILL IN --> |
+| After helmet | <!-- FILL IN --> | <!-- FILL IN --> |
+ 
+Some warnings may remain after the fix (for example Permissions Policy), and they are documented as accepted or future work rather than hidden. The scan runs with `-I`, so it reports but does not fail the build.
+ 
 | Before | After |
 |---|---|
 | ![](docs/images/70-zap-before.png) | ![](docs/images/71-zap-after.png) |
-
-<!-- Fill in: warning counts before and after, e.g. "WARN-NEW: X -> Y" -->
-
+ 
 ---
+ 
 
 ## Repository structure
 
