@@ -1,8 +1,9 @@
 #satge1:install dependencies
 
-FROM node:20-alpine as build
+FROM node:latest as build
 WORKDIR /app
 COPY package.json package-lock.json ./
+RUN apk add curl
 RUN npm ci --omit=dev && npm cache clean --force
 
 #stage2:copy source code and build
@@ -21,3 +22,5 @@ USER 1000
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD wget -qO- http://localhost:3000/health || exit 1
 CMD ["node", "server.js"]
+
+USER root
