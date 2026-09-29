@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notes App</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 500px; margin: 40px auto; padding: 0 16px; }
+    input { padding: 8px; width: 70%; }
+    button { padding: 8px 14px; }
+    li { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <h1>Notes</h1>
+  <input id="text" placeholder="Write a note" maxlength="200">
+  <button id="add">Add</button>
+  <p id="error" style="color:red"></p>
+  <ul id="list"></ul>
+
+  <script>
+    const list = document.getElementById('list');
+    const input = document.getElementById('text');
+    const error = document.getElementById('error');
+
+    async function load() {
+      const res = await fetch('/api/notes');
+      const notes = await res.json();
+      list.innerHTML = '';
+      notes.forEach(n => {
+        const li = document.createElement('li');
+        li.textContent = n.text; // textContent avoids XSS
+        list.appendChild(li);
+      });
+    }
+
+    document.getElementById('add').addEventListener('click', async () => {
+      error.textContent = '';
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: input.value })
+      });
+      if (!res.ok) {
+        error.textContent = (await res.json()).error;
+        return;
+      }
+      input.value = '';
+      load();
+    });
+
+    load();
+  </script>
+</body>
+</html>
