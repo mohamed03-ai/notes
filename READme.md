@@ -288,4 +288,4 @@ Stated honestly, since this is a lab environment:
 
 ## Author
 
-**Mohamed** · [GitHub](https://github.com/mohamed03-ai) · [LinkedIn](https://www.linkedin.com/in/your-profile)
+**Mohamed** · [GitHub](https://github.com/mohamed03-ai) · [LinkedIn](https://www.linkedin.com/in/mohamed-ouhichi)
